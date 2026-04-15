@@ -38,8 +38,8 @@ export default function SettingsPage() {
       setSaveMsg('儲存失敗：' + error.message)
     } else {
       setSavedLineUserId(lineUserId.trim())
-      setSaveMsg('已儲存')
-      setTimeout(() => setSaveMsg(''), 2000)
+      setSaveMsg('✓ LINE 綁定已儲存')
+      setTimeout(() => setSaveMsg(''), 5000)
     }
     setSaving(false)
   }
@@ -102,7 +102,13 @@ export default function SettingsPage() {
                   {saving ? '儲存中...' : '儲存'}
                 </Button>
               </div>
-              {saveMsg && <p className="text-xs text-green-500">{saveMsg}</p>}
+              {saveMsg && (
+                <p className={`text-sm font-medium px-3 py-2 rounded ${
+                  saveMsg.startsWith('儲存失敗')
+                    ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                    : 'bg-green-500/10 text-green-400 border border-green-500/30'
+                }`}>{saveMsg}</p>
+              )}
             </div>
           </div>
         </Card>
