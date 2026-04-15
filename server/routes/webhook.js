@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { supabase } from '../services/supabase.js'
-import { replyMessage } from '../services/line.js'
+import { replyMessage, pushMessage } from '../services/line.js'
 
 const router = Router()
 
@@ -31,9 +31,9 @@ async function getTeacherUserId(lineUserId) {
   return data?.id ?? null
 }
 
-// Handler: return User ID to LINE user
-async function handleGetId(replyToken, lineUserId) {
-  await replyMessage(replyToken,
+// Handler: return User ID to LINE user（用 push 避免 replyToken 過期）
+async function handleGetId(lineUserId) {
+  await pushMessage(lineUserId,
     `你的 LINE User ID 是：\n${lineUserId}\n\n請複製後貼到教學管理系統的「設定」頁面，完成綁定。`
   )
 }
@@ -204,7 +204,7 @@ router.post('/line', async (req, res) => {
 
       // Always allow "取得我的 ID" without auth（大小寫不敏感）
       if (text.replace(/\s/g, '').toLowerCase() === '取得我的id' || text.toLowerCase() === 'get my id') {
-        await handleGetId(replyToken, lineUserId)
+        await handleGetId(lineUserId)
         continue
       }
 
