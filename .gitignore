@@ -1,0 +1,18 @@
+# Dependencies
+app/node_modules/
+server/node_modules/
+
+# Environment variables (sensitive keys)
+app/.env.local
+server/.env
+
+# Build output
+app/dist/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

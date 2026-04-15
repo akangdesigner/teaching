@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest init -d)",
+      "Bash(npx shadcn@latest add card badge button input textarea select label separator)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(npm run:*)",
+      "Bash(node --input-type=module --eval ':*)",
+      "Bash(npx vite:*)",
+      "Bash(node index.js)",
+      "Bash(node --env-file=.env index.js)"
+    ]
+  }
+}
