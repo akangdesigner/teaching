@@ -6,8 +6,12 @@ export default function AuthGuard({ children }) {
   const [session, setSession] = useState(undefined) // undefined = loading
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) console.error('[AuthGuard]', error.message)
+      setSession(data?.session ?? null)
+    }).catch((err) => {
+      console.error('[AuthGuard] fetch failed:', err.message)
+      setSession(null)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, s) => {
