@@ -80,7 +80,7 @@ export default function ClientForm() {
       current_stage: form.current_stage, personality: form.personality.trim(),
       situation: form.situation.trim(), skills: form.skills.trim(),
       goals: form.goals.split('\n').map(g => g.trim()).filter(Boolean),
-      next_session_date: form.next_session_date || null,
+      next_session_date: form.next_session_date ? new Date(form.next_session_date).toISOString() : null,
     }
 
     let clientId = id

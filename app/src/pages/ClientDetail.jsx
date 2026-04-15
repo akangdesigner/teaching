@@ -137,7 +137,7 @@ export default function ClientDetail() {
 
   async function saveNextSession() {
     const { data } = await supabase
-      .from('clients').update({ next_session_date: nextSessionInput || null })
+      .from('clients').update({ next_session_date: nextSessionInput ? new Date(nextSessionInput).toISOString() : null })
       .eq('id', id).select().single()
     setClient(data)
     setEditingNextSession(false)
