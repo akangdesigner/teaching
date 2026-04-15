@@ -200,8 +200,10 @@ router.post('/line', async (req, res) => {
     if (!lineUserId || !replyToken) continue
 
     try {
-      // Always allow "取得我的 ID" without auth
-      if (text === '取得我的 ID' || text === '取得我的id' || text.toLowerCase() === 'get my id') {
+      console.log(`[webhook] userId=${lineUserId} text="${text}"`)
+
+      // Always allow "取得我的 ID" without auth（大小寫不敏感）
+      if (text.replace(/\s/g, '').toLowerCase() === '取得我的id' || text.toLowerCase() === 'get my id') {
         await handleGetId(replyToken, lineUserId)
         continue
       }

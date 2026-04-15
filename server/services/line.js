@@ -10,15 +10,23 @@ function getHeaders() {
 }
 
 export async function replyMessage(replyToken, text) {
-  await axios.post(`${LINE_API}/reply`, {
-    replyToken,
-    messages: [{ type: 'text', text }],
-  }, { headers: getHeaders() })
+  try {
+    await axios.post(`${LINE_API}/reply`, {
+      replyToken,
+      messages: [{ type: 'text', text }],
+    }, { headers: getHeaders() })
+  } catch (err) {
+    console.error('[line] replyMessage failed:', err.response?.data ?? err.message)
+  }
 }
 
 export async function pushMessage(lineUserId, text) {
-  await axios.post(`${LINE_API}/push`, {
-    to: lineUserId,
-    messages: [{ type: 'text', text }],
-  }, { headers: getHeaders() })
+  try {
+    await axios.post(`${LINE_API}/push`, {
+      to: lineUserId,
+      messages: [{ type: 'text', text }],
+    }, { headers: getHeaders() })
+  } catch (err) {
+    console.error('[line] pushMessage failed:', err.response?.data ?? err.message)
+  }
 }
