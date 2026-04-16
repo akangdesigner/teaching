@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatDate, toDatetimeInput } from '../lib/format'
+import { syncEvent } from '../lib/googleSync'
 import Navbar from '../components/Navbar'
 import StageTag from '../components/StageTag'
 import { Separator } from '@/components/ui/separator'
@@ -133,6 +134,7 @@ export default function ClientDetail() {
     const { data } = await supabase.from('sessions').update(payload).eq('id', editingSessionId).select().single()
     setSessions(prev => prev.map(s => s.id === editingSessionId ? data : s))
     setEditingSessionId(null)
+    syncEvent({ type: 'session', id: editingSessionId })
   }
 
   async function saveNextSession() {
@@ -141,6 +143,7 @@ export default function ClientDetail() {
       .eq('id', id).select().single()
     setClient(data)
     setEditingNextSession(false)
+    syncEvent({ type: 'client', id })
   }
 
   async function deleteClient() {

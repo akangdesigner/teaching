@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toDatetimeInput } from '../lib/format'
+import { syncEvent } from '../lib/googleSync'
 import Navbar from '../components/Navbar'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -118,6 +119,7 @@ export default function ClientForm() {
       )
     }
 
+    syncEvent({ type: 'client', id: clientId })
     navigate(`/clients/${clientId}`)
   }
 
