@@ -231,7 +231,7 @@ export default function CalendarPage() {
                 messages={messages}
                 eventPropGetter={eventStyleGetter}
                 onSelectEvent={onSelectEvent}
-                views={['month', 'week', 'agenda']}
+                views={['month', 'agenda']}
                 defaultView="month"
                 date={currentDate}
                 onNavigate={date => setCurrentDate(date)}
