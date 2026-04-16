@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatDate } from '../lib/format'
+import { formatDate, toDatetimeInput } from '../lib/format'
 import Navbar from '../components/Navbar'
 import StageTag from '../components/StageTag'
 import { Separator } from '@/components/ui/separator'
@@ -115,7 +115,7 @@ export default function ClientDetail() {
     setEditingSessionId(session.id)
     setEditSessionForm({
       session_number: session.session_number ?? '',
-      date: session.date ? new Date(session.date).toISOString().slice(0, 16) : '',
+      date: session.date ? toDatetimeInput(session.date) : '',
       objectives: session.objectives ?? '',
       progress: session.progress ?? '',
       notes: session.notes ?? '',
@@ -273,7 +273,7 @@ export default function ClientDetail() {
                 </p>
                 <button
                   onClick={() => {
-                    setNextSessionInput(client.next_session_date ? new Date(client.next_session_date).toISOString().slice(0, 16) : '')
+                    setNextSessionInput(toDatetimeInput(client.next_session_date))
                     setEditingNextSession(true)
                   }}
                   className="font-mono text-xs text-primary/50 hover:text-primary transition-colors duration-150"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { toDatetimeInput } from '../lib/format'
 import Navbar from '../components/Navbar'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -51,8 +52,8 @@ export default function ClientForm() {
         current_stage: c.current_stage ?? 'preparation',
         personality: c.personality ?? '', situation: c.situation ?? '',
         skills: c.skills ?? '', goals: (c.goals ?? []).join('\n'),
-        next_session_date: c.next_session_date ? new Date(c.next_session_date).toISOString().slice(0, 16) : '',
-        consultation_date: con?.date ? new Date(con.date).toISOString().slice(0, 16) : '',
+        next_session_date: toDatetimeInput(c.next_session_date),
+        consultation_date: toDatetimeInput(con?.date),
         summary: con?.summary ?? '', tech_level: con?.tech_level ?? 'beginner',
         weekly_hours: con?.weekly_hours ?? '', tools: con?.tools ?? '',
         project_proposals: (con?.project_proposals ?? []).join('\n'),
