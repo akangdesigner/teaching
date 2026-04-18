@@ -103,10 +103,10 @@ export async function generateConsultationReport({ client, consultation, tasks }
   }
 
   const consultationDateStr = toDateStr(consultation?.date) ?? '（未填）'
-  const titleDate = consultation?.date
-    ? (() => { const d = new Date(consultation.date); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` })()
-    : '??/??'
   const nextSessionStr = toDateStr(client?.next_session_date)
+  const titleDate = client?.next_session_date
+    ? (() => { const d = new Date(client.next_session_date); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` })()
+    : '??/??'
 
   const doneTasks = tasks.filter(t => t.completed).map(t => t.description)
   const pendingTasks = tasks.filter(t => !t.completed).map(t => t.description)
@@ -189,7 +189,7 @@ ${context}
   return text.trim()
 }
 
-export async function generateSessionReport({ client, consultation, tasks, sessionNumber, todayStr }) {
+export async function generateSessionReport({ client, consultation, tasks, sessionNumber, todayStr, latestSession }) {
   const doneTasks = tasks.filter(t => t.completed)
   const pendingTasks = tasks.filter(t => !t.completed)
 
@@ -203,12 +203,23 @@ export async function generateSessionReport({ client, consultation, tasks, sessi
   }
 
   const nextSessionStr = toDateStr(client?.next_session_date)
-  const titleDate = todayStr  // MM/DD 格式由呼叫端傳入
+  const titleDate = client?.next_session_date
+    ? (() => { const d = new Date(client.next_session_date); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` })()
+    : todayStr
 
   const taskLines = [
     ...doneTasks.map(t => `[已完成] ${t.description}`),
     ...pendingTasks.map(t => `[待完成] ${t.description}`),
   ].join('\n') || '（無作業紀錄）'
+
+  const prevSessionBlock = latestSession
+    ? `
+【上一期課程紀錄（第 ${latestSession.session_number} 堂）】
+- 本堂目標：${latestSession.objectives ?? '（未填）'}
+- 課程進度：${latestSession.progress ?? '（未填）'}
+- 備注：${latestSession.notes ?? '（無）'}
+`.trim()
+    : `【上一期課程紀錄】無（這是第一堂正式課）`
 
   const context = `
 個案姓名：${client.name}
@@ -220,11 +231,13 @@ export async function generateSessionReport({ client, consultation, tasks, sessi
 每週可投入時間：${consultation?.weekly_hours ?? '（未填）'}
 技術程度：${{ beginner: '初學', intermediate: '有基礎', advanced: '進階' }[consultation?.tech_level] ?? '（未填）'}
 
-【上次（第一階段諮詢）指派的作業】
+${prevSessionBlock}
+
+【作業狀況】
 ${taskLines}
 
 今天日期：${todayStr}
-今天堂次：第 ${sessionNumber} 堂（第一堂正式課）
+今天堂次：第 ${sessionNumber} 堂
 下次上課時間：${nextSessionStr ?? '（未填）'}
 `.trim()
 
@@ -244,7 +257,7 @@ ${context}
 （列出每條作業的狀況，已完成的以 -> ✓ 開頭，待完成的以 -> ○ 開頭，說明任務內容）
 
 課程進度討論
-（根據個案背景與學習目標，條列今天第一堂課預計討論的重點，每條以 ➤ 開頭）
+（根據個案背景、上一期課程進度與學習目標，條列今天這堂課預計討論的重點，每條以 ➤ 開頭）
 
 本次任務指派
 （課後補充）

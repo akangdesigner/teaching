@@ -152,9 +152,10 @@ export default function AIAssistant() {
       supabase.from('clients').select('*').eq('id', reportClientId).single(),
       supabase.from('consultations').select('*').eq('client_id', reportClientId).maybeSingle(),
       supabase.from('tasks').select('*').eq('client_id', reportClientId).order('created_at'),
-      supabase.from('sessions').select('id').eq('client_id', reportClientId),
+      supabase.from('sessions').select('*').eq('client_id', reportClientId).order('session_number', { ascending: false }),
     ]).then(([{ data: client }, { data: consultation }, { data: tasks }, { data: sessions }]) => {
-      setReportData({ client, consultation, tasks: tasks ?? [], sessionCount: (sessions ?? []).length })
+      const sessionList = sessions ?? []
+      setReportData({ client, consultation, tasks: tasks ?? [], sessionCount: sessionList.length, latestSession: sessionList[0] ?? null })
       setReportLoading(false)
     })
   }, [reportClientId])
@@ -166,12 +167,12 @@ export default function AIAssistant() {
     setPreGenerating(true)
     setPreReport('')
     try {
-      const { client, consultation, tasks, sessionCount } = reportData
+      const { client, consultation, tasks, sessionCount, latestSession } = reportData
       let text
       if (['preparation', 'stage1'].includes(client.current_stage)) {
         text = await generateConsultationReport({ client, consultation, tasks })
       } else {
-        text = await generateSessionReport({ client, consultation, tasks, sessionNumber: sessionCount + 1, todayStr: getTodayStr() })
+        text = await generateSessionReport({ client, consultation, tasks, sessionNumber: sessionCount + 1, todayStr: getTodayStr(), latestSession })
       }
       setPreReport(text)
     } catch (err) {
