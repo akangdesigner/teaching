@@ -108,9 +108,6 @@ export async function generateConsultationReport({ client, consultation, tasks }
     ? (() => { const d = new Date(client.next_session_date); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` })()
     : '??/??'
 
-  const doneTasks = tasks.filter(t => t.completed).map(t => t.description)
-  const pendingTasks = tasks.filter(t => !t.completed).map(t => t.description)
-
   const context = `
 個案姓名：${client.name}
 學習專案：${client.project_name ?? '（未填）'}
@@ -129,8 +126,7 @@ export async function generateConsultationReport({ client, consultation, tasks }
 專案提案：${(consultation?.project_proposals ?? []).join('、') || '（未填）'}
 備註：${consultation?.notes ?? '（未填）'}
 
-已完成作業：${doneTasks.length > 0 ? doneTasks.join('、') : '無'}
-待完成作業：${pendingTasks.length > 0 ? pendingTasks.join('、') : '無'}
+上次指派作業：${tasks.length > 0 ? tasks.map(t => t.description).join('、') : '無'}
 `.trim()
 
   const prompt = `根據以下個案資料，生成一份「第一階段諮詢紀錄報告」。
@@ -145,7 +141,7 @@ ${context}
 所需技能：（填入相關工具與技能）
 呈現技法：（填入主要交付成果項目）
 上次任務回顧
-（列出已完成的作業，每條以 -> 開頭說明完成狀況；若無已完成則寫「初次諮詢，無前次任務」）
+（列出「上次指派作業」的每條作業，每條以 -> 開頭；若無則寫「初次諮詢，無前次任務」）
 專案進度討論
 【專案類型標籤】${consultationDateStr} - （同上結束日期）
 專案題目：（同上）
@@ -190,9 +186,6 @@ ${context}
 }
 
 export async function generateSessionReport({ client, consultation, tasks, sessionNumber, todayStr, latestSession }) {
-  const doneTasks = tasks.filter(t => t.completed)
-  const pendingTasks = tasks.filter(t => !t.completed)
-
   const toDateStr = (iso) => {
     if (!iso) return null
     const d = new Date(iso)
@@ -207,10 +200,9 @@ export async function generateSessionReport({ client, consultation, tasks, sessi
     ? (() => { const d = new Date(client.next_session_date); return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` })()
     : todayStr
 
-  const taskLines = [
-    ...doneTasks.map(t => `[已完成] ${t.description}`),
-    ...pendingTasks.map(t => `[待完成] ${t.description}`),
-  ].join('\n') || '（無作業紀錄）'
+  const taskLines = tasks.length > 0
+    ? tasks.map(t => t.description).join('\n')
+    : '（無作業紀錄）'
 
   const prevSessionBlock = latestSession
     ? `
@@ -254,7 +246,7 @@ ${context}
 所需技能：（根據工具與技術背景填入）
 
 上次任務回顧
-（列出每條作業的狀況，已完成的以 -> ✓ 開頭，待完成的以 -> ○ 開頭，說明任務內容）
+（列出「作業狀況」裡的每條作業，每條以 -> 開頭；若無則寫「無前次任務」）
 
 課程進度討論
 （根據個案背景、上一期課程進度與學習目標，條列今天這堂課預計討論的重點，每條以 ➤ 開頭）
