@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Navbar from '../components/Navbar'
 import { generateConsultationReport } from '../lib/gemini'
+import { generateWordReport, downloadWordBlob } from '../lib/wordGenerator'
 
 export default function ConsultationReport() {
   const [clients, setClients] = useState([])
@@ -16,7 +17,7 @@ export default function ConsultationReport() {
     supabase
       .from('clients')
       .select('id, name, project_name, current_stage')
-      .eq('current_stage', 'stage1')
+      .in('current_stage', ['trial', 'active'])
       .order('name')
       .then(({ data }) => setClients(data ?? []))
   }, [])
@@ -49,6 +50,14 @@ export default function ConsultationReport() {
     }
   }
 
+  async function handleDownloadWord() {
+    const firstLine = report.split('\n').find(l => l.trim()) ?? '諮詢報告'
+    const title = firstLine.replace(/^標題：/, '').replace(/[🟢🔵]/g, '').trim()
+    const blob = await generateWordReport(title, report)
+    const date = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }).replace(/\//g, '-')
+    downloadWordBlob(blob, `${title}_${date}.docx`)
+  }
+
   async function handleCopy() {
     const html = reportToHtml(report)
     try {
@@ -73,14 +82,14 @@ export default function ConsultationReport() {
       <main className="max-w-4xl mx-auto px-8 py-10">
 
         <h1 className="font-display text-3xl font-medium text-foreground mb-2 tracking-tight">諮詢報告生成</h1>
-        <p className="text-sm text-muted-foreground font-mono mb-8">第一階段｜根據現有資料自動產出報告格式</p>
+        <p className="text-sm text-muted-foreground font-mono mb-8">根據初次諮詢資料自動產出報告格式</p>
 
-        {/* 選擇個案 */}
+        {/* 選擇學生 */}
         <div className="mb-8">
-          <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground mb-2">選擇個案</p>
+          <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground mb-2">選擇學生</p>
           <div className="flex flex-wrap gap-2">
             {clients.length === 0 && (
-              <p className="text-sm text-muted-foreground font-mono">目前沒有第一階段個案</p>
+              <p className="text-sm text-muted-foreground font-mono">目前沒有學生</p>
             )}
             {clients.map(c => (
               <button
@@ -107,14 +116,14 @@ export default function ConsultationReport() {
 
             <Row label="專案" value={client?.project_name} />
             <Row label="目標" value={client?.goals?.join('、')} />
-            <Row label="技術背景" value={client?.skills} />
+            <Row label="現有基礎" value={client?.skills} />
             {consultation ? (
               <>
                 <Row label="諮詢日期" value={consultation.date ? new Date(consultation.date).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }) : null} />
                 <Row label="摘要" value={consultation.summary} />
-                <Row label="工具" value={consultation.tools} />
+                <Row label="教材/工具" value={consultation.tools} />
                 <Row label="每週時間" value={consultation.weekly_hours} />
-                <Row label="提案方向" value={consultation.project_proposals?.join('、')} />
+                <Row label="學習計畫" value={consultation.project_proposals?.join('、')} />
                 <Row label="備註" value={consultation.notes} />
               </>
             ) : (
@@ -154,12 +163,20 @@ export default function ConsultationReport() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">報告輸出</span>
               {report && (
-                <button
-                  onClick={handleCopy}
-                  className="font-mono text-xs tracking-wider border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-all duration-200"
-                >
-                  {copied ? '已複製 ✓' : '複製'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadWord}
+                    className="font-mono text-xs tracking-wider border border-border text-muted-foreground px-3 py-1.5 hover:border-foreground hover:text-foreground transition-all duration-200"
+                  >
+                    ⬇ Word
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="font-mono text-xs tracking-wider border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-all duration-200"
+                  >
+                    {copied ? '已複製 ✓' : '複製'}
+                  </button>
+                </div>
               )}
             </div>
             <div className="p-5">

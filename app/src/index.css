@@ -134,14 +134,10 @@ body {
 }
 
 /* ─── Custom stage colors ─── */
-.stage-preparation { color: #6b9e7c; }
-.stage-preparation-dot { background-color: #6b9e7c; }
-.stage-1 { color: #7b93c4; }
-.stage-1-dot { background-color: #7b93c4; }
-.stage-2 { color: #d4a843; }
-.stage-2-dot { background-color: #d4a843; }
-.stage-3 { color: #c47a58; }
-.stage-3-dot { background-color: #c47a58; }
+.stage-trial { color: #d4a843; }
+.stage-trial-dot { background-color: #d4a843; }
+.stage-active { color: #7b93c4; }
+.stage-active-dot { background-color: #7b93c4; }
 .stage-completed { color: #5a9e7a; }
 .stage-completed-dot { background-color: #5a9e7a; }
 

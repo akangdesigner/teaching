@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Navbar from '../components/Navbar'
 import { generateSessionReport } from '../lib/gemini'
+import { generateWordReport, downloadWordBlob } from '../lib/wordGenerator'
 
 function getTodayStr() {
   const d = new Date()
@@ -23,7 +24,7 @@ export default function SessionReport() {
     supabase
       .from('clients')
       .select('id, name, project_name, current_stage')
-      .eq('current_stage', 'stage1')
+      .eq('current_stage', 'active')
       .order('name')
       .then(({ data }) => setClients(data ?? []))
   }, [])
@@ -36,8 +37,10 @@ export default function SessionReport() {
       supabase.from('clients').select('*').eq('id', selectedId).single(),
       supabase.from('consultations').select('*').eq('client_id', selectedId).maybeSingle(),
       supabase.from('tasks').select('*').eq('client_id', selectedId).order('created_at'),
-    ]).then(([{ data: client }, { data: consultation }, { data: tasks }]) => {
-      setData({ client, consultation, tasks: tasks ?? [] })
+      supabase.from('sessions').select('*').eq('client_id', selectedId).order('session_number', { ascending: false }),
+    ]).then(([{ data: client }, { data: consultation }, { data: tasks }, { data: sessions }]) => {
+      const sessionList = sessions ?? []
+      setData({ client, consultation, tasks: tasks ?? [], sessionCount: sessionList.length, latestSession: sessionList[0] ?? null })
       setLoading(false)
     })
   }, [selectedId])
@@ -51,8 +54,9 @@ export default function SessionReport() {
         client: data.client,
         consultation: data.consultation,
         tasks: data.tasks,
-        sessionNumber: 1,
+        sessionNumber: data.sessionCount + 1,
         todayStr: getTodayStr(),
+        latestSession: data.latestSession,
       })
       setReport(text)
     } catch (err) {
@@ -78,6 +82,14 @@ export default function SessionReport() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function handleDownloadWord() {
+    const firstLine = report.split('\n').find(l => l.trim()) ?? '課程報告'
+    const title = firstLine.replace(/^標題：/, '').replace(/[🟢🔵]/g, '').trim()
+    const blob = await generateWordReport(title, report)
+    const date = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }).replace(/\//g, '-')
+    downloadWordBlob(blob, `${title}_${date}.docx`)
+  }
+
   const { client, consultation, tasks } = data ?? {}
   const doneTasks = tasks?.filter(t => t.completed) ?? []
   const pendingTasks = tasks?.filter(t => !t.completed) ?? []
@@ -89,15 +101,15 @@ export default function SessionReport() {
 
         <h1 className="font-display text-3xl font-medium text-foreground mb-2 tracking-tight">課程報告生成</h1>
         <p className="text-sm text-muted-foreground font-mono mb-8">
-          第二階段 #01｜根據第一階段諮詢作業，產出今日課前報告
+          根據先前作業，產出今日課前報告
         </p>
 
-        {/* 選擇個案 */}
+        {/* 選擇學生 */}
         <div className="mb-8">
-          <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground mb-2">選擇個案</p>
+          <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground mb-2">選擇學生</p>
           <div className="flex flex-wrap gap-2">
             {clients.length === 0 && (
-              <p className="text-sm text-muted-foreground font-mono">目前沒有第一階段個案</p>
+              <p className="text-sm text-muted-foreground font-mono">目前沒有進行中的學生</p>
             )}
             {clients.map(c => (
               <button
@@ -122,10 +134,13 @@ export default function SessionReport() {
           <div className="mb-8 border border-border p-5 space-y-4">
             <p className="font-mono text-xs tracking-widest uppercase text-muted-foreground">現有資料</p>
 
-            <Row label="專案" value={client?.project_name} />
+            <Row label="主題" value={client?.project_name} />
             <Row label="目標" value={client?.goals?.join('、')} />
-            <Row label="工具" value={consultation?.tools} />
+            <Row label="教材" value={consultation?.tools} />
             <Row label="摘要" value={consultation?.summary} />
+            {data.sessionCount > 0 && (
+              <Row label="堂次" value={`已上 ${data.sessionCount} 堂，本次第 ${data.sessionCount + 1} 堂`} />
+            )}
 
             {tasks.length > 0 ? (
               <div>
@@ -164,12 +179,20 @@ export default function SessionReport() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">報告輸出</span>
               {report && (
-                <button
-                  onClick={handleCopy}
-                  className="font-mono text-xs tracking-wider border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-all duration-200"
-                >
-                  {copied ? '已複製 ✓' : '複製'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleDownloadWord}
+                    className="font-mono text-xs tracking-wider border border-border text-muted-foreground px-3 py-1.5 hover:border-foreground hover:text-foreground transition-all duration-200"
+                  >
+                    ⬇ Word
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="font-mono text-xs tracking-wider border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-all duration-200"
+                  >
+                    {copied ? '已複製 ✓' : '複製'}
+                  </button>
+                </div>
               )}
             </div>
             <div className="p-5">
@@ -191,7 +214,7 @@ function reportToHtml(text) {
   const htmlLines = lines.map(line => {
     const trimmed = line.trim()
     if (!trimmed) return '<br>'
-    if (trimmed.startsWith('標題：') || trimmed.includes('第二階段課程紀錄')) {
+    if (trimmed.startsWith('標題：') || trimmed.includes('🟢') || trimmed.includes('🔵')) {
       return `<h2>${esc(trimmed.replace(/^標題：/, ''))}</h2>`
     }
     if (['上次任務回顧', '課程進度討論', '本次任務指派'].some(h => trimmed.startsWith(h))) {

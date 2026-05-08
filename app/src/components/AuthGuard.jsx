@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 
 async function syncGoogleToken(session) {
   if (!session?.provider_refresh_token) return
-  // 每次登入把最新的 Google refresh_token 存進 profiles
   await supabase.from('profiles').update({
     google_refresh_token: session.provider_refresh_token,
     google_connected_at: new Date().toISOString(),
@@ -15,6 +14,12 @@ export default function AuthGuard({ children }) {
   const [session, setSession] = useState(undefined) // undefined = loading
 
   useEffect(() => {
+    // 訪客模式：直接放行
+    if (sessionStorage.getItem('guest') === 'true') {
+      setSession('guest')
+      return
+    }
+
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) console.error('[AuthGuard]', error.message)
       const s = data?.session ?? null

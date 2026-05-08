@@ -30,11 +30,14 @@ const messages = {
 }
 
 const STAGE_COLORS = {
-  preparation: '#6b9e7c',
-  stage1: '#7b93c4',
-  stage2: '#d4a843',
-  stage3: '#c47a58',
+  trial: '#d4a843',
+  active: '#7b93c4',
   completed: '#5a9e7a',
+  // legacy
+  preparation: '#d4a843',
+  stage1: '#7b93c4',
+  stage2: '#7b93c4',
+  stage3: '#7b93c4',
   past: '#4a4a5a',
 }
 

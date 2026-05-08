@@ -2,16 +2,20 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Navbar from '@/components/Navbar'
 import { supabase } from '@/lib/supabase'
-import { parseSessionNotes, generateConsultationReport, generateSessionReport } from '@/lib/gemini'
+import { parseSessionNotes, generateConsultationReport, generateSessionReport, generateProgressOverview } from '@/lib/gemini'
+import { generateWordReport, downloadWordBlob } from '@/lib/wordGenerator'
 
 const NEW_CLIENT_VALUE = '__new__'
 
 const STAGE_LABEL = {
-  preparation: '準備階段',
-  stage1: '第一階段（模擬諮詢）',
-  stage2: '第二階段（課程）',
-  stage3: '第三階段（成果報告）',
+  trial: '試聽',
+  active: '進行中',
   completed: '已完成',
+  // legacy
+  preparation: '試聽',
+  stage1: '進行中',
+  stage2: '進行中',
+  stage3: '進行中',
 }
 
 const TIMESTAMP_FIELDS = ['date', 'next_session_date']
@@ -44,7 +48,7 @@ function reportToHtml(text) {
   const htmlLines = lines.map(line => {
     const trimmed = line.trim()
     if (!trimmed) return '<br>'
-    if (trimmed.startsWith('標題：') || (trimmed.includes('階段') && (trimmed.includes('🟢') || trimmed.includes('🔵')))) {
+    if (trimmed.startsWith('標題：') || trimmed.includes('🟢') || trimmed.includes('🔵')) {
       return `<h2>${esc(trimmed.replace(/^標題：/, ''))}</h2>`
     }
     if (['上次任務回顧', '專案進度討論', '課程進度討論', '本次任務指派', '時程規劃', '預期成果'].some(h => trimmed.startsWith(h))) {
@@ -90,6 +94,14 @@ function ReportOutput({ report, generating }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function handleDownloadWord() {
+    const firstLine = report.split('\n').find(l => l.trim()) ?? '報告'
+    const title = firstLine.replace(/^標題：/, '').replace(/[🟢🔵]/g, '').trim()
+    const blob = await generateWordReport(title, report)
+    const date = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }).replace(/\//g, '-')
+    downloadWordBlob(blob, `${title}_${date}.docx`)
+  }
+
   if (!generating && !report) return null
 
   return (
@@ -97,12 +109,20 @@ function ReportOutput({ report, generating }) {
       <div className="flex items-center justify-between px-5 py-3 border-b border-border">
         <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">報告輸出</span>
         {report && (
-          <button
-            onClick={handleCopy}
-            className="font-mono text-xs tracking-wider border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-all duration-200"
-          >
-            {copied ? '已複製 ✓' : '複製'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadWord}
+              className="font-mono text-xs tracking-wider border border-border text-muted-foreground px-3 py-1.5 hover:border-foreground hover:text-foreground transition-all duration-200"
+            >
+              ⬇ Word
+            </button>
+            <button
+              onClick={handleCopy}
+              className="font-mono text-xs tracking-wider border border-primary/40 text-primary px-3 py-1.5 hover:bg-primary/10 transition-all duration-200"
+            >
+              {copied ? '已複製 ✓' : '複製'}
+            </button>
+          </div>
         )}
       </div>
       <div className="p-5">
@@ -127,6 +147,13 @@ export default function AIAssistant() {
   const [preReport, setPreReport] = useState('')
   const [preGenerating, setPreGenerating] = useState(false)
 
+  // ── 課程總覽 state ──
+  const [overviewClientId, setOverviewClientId] = useState('')
+  const [overviewData, setOverviewData] = useState(null)
+  const [overviewLoading, setOverviewLoading] = useState(false)
+  const [overviewReport, setOverviewReport] = useState('')
+  const [overviewGenerating, setOverviewGenerating] = useState(false)
+
   // ── 更新進度 state ──
   const [selectedClientId, setSelectedClientId] = useState('')
   const [stageHint, setStageHint] = useState('') // 'profile' | 'consultation' | 'session'
@@ -137,6 +164,7 @@ export default function AIAssistant() {
   const [postReport, setPostReport] = useState('')
   const [postGenerating, setPostGenerating] = useState(false)
   const [saveStatus, setSaveStatus] = useState('idle') // idle | saved
+  const [sessionCount, setSessionCount] = useState(0)
 
   useEffect(() => {
     supabase.from('clients').select('id, name, current_stage').order('name')
@@ -160,6 +188,29 @@ export default function AIAssistant() {
     })
   }, [reportClientId])
 
+  // Load client data for overview
+  useEffect(() => {
+    if (!overviewClientId) { setOverviewData(null); setOverviewReport(''); return }
+    setOverviewLoading(true)
+    setOverviewReport('')
+    Promise.all([
+      supabase.from('clients').select('*').eq('id', overviewClientId).single(),
+      supabase.from('consultations').select('*').eq('client_id', overviewClientId).maybeSingle(),
+      supabase.from('tasks').select('*').eq('client_id', overviewClientId).order('created_at'),
+      supabase.from('sessions').select('*').eq('client_id', overviewClientId).order('session_number'),
+    ]).then(([{ data: client }, { data: consultation }, { data: tasks }, { data: sessions }]) => {
+      setOverviewData({ client, consultation, tasks: tasks ?? [], sessions: sessions ?? [] })
+      setOverviewLoading(false)
+    })
+  }, [overviewClientId])
+
+  // 選個案後抓 session 數
+  useEffect(() => {
+    if (!selectedClientId || selectedClientId === NEW_CLIENT_VALUE) { setSessionCount(0); return }
+    supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('client_id', selectedClientId)
+      .then(({ count }) => setSessionCount(count ?? 0))
+  }, [selectedClientId])
+
   // ── 預寫報告 ──
 
   async function handlePreGenerate() {
@@ -169,7 +220,7 @@ export default function AIAssistant() {
     try {
       const { client, consultation, tasks, sessionCount, latestSession } = reportData
       let text
-      if (['preparation', 'stage1'].includes(client.current_stage)) {
+      if (client.current_stage === 'trial' || client.current_stage === 'preparation') {
         text = await generateConsultationReport({ client, consultation, tasks })
       } else {
         text = await generateSessionReport({ client, consultation, tasks, sessionNumber: sessionCount + 1, todayStr: getTodayStr(), latestSession })
@@ -179,6 +230,23 @@ export default function AIAssistant() {
       alert(`生成失敗：${err.message}`)
     } finally {
       setPreGenerating(false)
+    }
+  }
+
+  // ── 課程總覽 ──
+
+  async function handleOverviewGenerate() {
+    if (!overviewData) return
+    setOverviewGenerating(true)
+    setOverviewReport('')
+    try {
+      const { client, consultation, tasks, sessions } = overviewData
+      const text = await generateProgressOverview({ client, consultation, tasks, sessions })
+      setOverviewReport(text)
+    } catch (err) {
+      alert(`生成失敗：${err.message}`)
+    } finally {
+      setOverviewGenerating(false)
     }
   }
 
@@ -209,6 +277,7 @@ export default function AIAssistant() {
 
       let clientId = selectedClientId
       let resolvedName = selectedClient?.name ?? ''
+      let lastSessionId = null
 
       for (const action of parsed.actions) {
         if (action.type === 'insert_client') {
@@ -231,12 +300,18 @@ export default function AIAssistant() {
         }
         if (action.type === 'insert_session') {
           const clean = sanitize(action.data)
-          const { error: e } = await supabase.from('sessions').insert({ ...clean, client_id: clientId })
+          const { data, error: e } = await supabase.from('sessions').insert({ ...clean, client_id: clientId }).select().single()
           if (e) throw new Error(`新增課程紀錄失敗：${e.message}`)
+          lastSessionId = data.id
         }
         if (action.type === 'insert_tasks') {
           const dataArr = Array.isArray(action.data) ? action.data : [action.data]
-          const tasks = dataArr.map(t => ({ ...sanitize(t), client_id: clientId }))
+          const tasks = dataArr.map(t => ({
+            completed: true,
+            ...sanitize(t),
+            client_id: clientId,
+            ...(t.source === 'session' && lastSessionId ? { session_id: lastSessionId } : {}),
+          }))
           const { error: e } = await supabase.from('tasks').insert(tasks)
           if (e) throw new Error(`新增作業失敗：${e.message}`)
         }
@@ -244,6 +319,9 @@ export default function AIAssistant() {
 
       setSavedClientId(clientId)
       setSaveStatus('saved')
+      // 重抓 session 數讓按鈕更新
+      const { count } = await supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('client_id', clientId)
+      setSessionCount(count ?? 0)
 
       // Auto-generate report from updated DB data
       const hasConsultation = parsed.actions.some(a => a.type === 'insert_consultation')
@@ -288,7 +366,7 @@ export default function AIAssistant() {
   const doneTasks = tasks?.filter(t => t.completed) ?? []
   const pendingTasks = tasks?.filter(t => !t.completed) ?? []
   const reportTypeLabel = reportData?.client
-    ? (['preparation', 'stage1'].includes(reportData.client.current_stage) ? '諮詢報告' : '課程報告')
+    ? (['trial', 'preparation'].includes(reportData.client.current_stage) ? '諮詢報告' : '課程報告')
     : '報告'
 
   return (
@@ -300,7 +378,7 @@ export default function AIAssistant() {
 
         {/* Tabs */}
         <div className="flex border-b border-border mb-8">
-          {[['update', '更新進度'], ['report', '預寫報告']].map(([key, label]) => (
+          {[['update', '更新進度'], ['report', '預寫報告'], ['overview', '課程總覽']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => setMode(key)}
@@ -345,8 +423,8 @@ export default function AIAssistant() {
                     ? [{ key: 'profile', label: '學生狀況', desc: '建立學生基本資料' }]
                     : [
                         { key: 'profile',       label: '學生狀況',  desc: '更新背景資料' },
-                        { key: 'consultation',  label: '第一階段後', desc: '模擬諮詢結束' },
-                        { key: 'session',       label: '第二階段後', desc: '課程結束' },
+                        { key: 'consultation',  label: '首次諮詢後', desc: '模擬諮詢結束' },
+                        { key: 'session',       label: `第 ${sessionCount + 1} 堂課後`, desc: `課程 #${sessionCount + 1} 結束` },
                       ]
                   ).map(({ key, label, desc }, i, arr) => (
                     <div key={key} className="flex items-center">
@@ -427,6 +505,62 @@ export default function AIAssistant() {
           </div>
         )}
 
+        {/* ── 課程總覽 ── */}
+        {mode === 'overview' && (
+          <div>
+            <div className="mb-6">
+              <label className="text-xs font-mono tracking-widest uppercase text-muted-foreground block mb-2">選擇個案</label>
+              <select
+                value={overviewClientId}
+                onChange={e => { setOverviewClientId(e.target.value); setOverviewReport('') }}
+                className="w-full bg-card border border-border text-foreground text-sm px-3 py-2 focus:outline-none focus:border-primary/60"
+              >
+                <option value="">— 請選擇 —</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}（{STAGE_LABEL[c.current_stage] || c.current_stage}）
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {overviewLoading && <p className="text-xs font-mono text-muted-foreground">載入中...</p>}
+
+            {overviewData && !overviewLoading && (
+              <>
+                <div className="mb-6 border border-border p-4 space-y-2.5">
+                  <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground mb-3">資料摘要</p>
+                  <DataRow label="專案" value={overviewData.client?.project_name} />
+                  <DataRow label="已上堂數" value={overviewData.sessions.length > 0 ? `${overviewData.sessions.length} 堂` : '尚無課程'} />
+                  <DataRow label="作業總數" value={overviewData.tasks.length > 0 ? `${overviewData.tasks.filter(t => t.completed).length} / ${overviewData.tasks.length} 已完成` : '無作業'} />
+                  {overviewData.sessions.length > 0 && (
+                    <div>
+                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">課程紀錄</p>
+                      <div className="space-y-0.5">
+                        {overviewData.sessions.map(s => (
+                          <p key={s.id} className="text-xs text-foreground font-mono">
+                            #{String(s.session_number).padStart(2, '0')} {s.objectives ? `— ${s.objectives.slice(0, 40)}${s.objectives.length > 40 ? '...' : ''}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={handleOverviewGenerate}
+                  disabled={overviewGenerating}
+                  className="text-xs font-mono tracking-wider border border-primary/40 bg-primary/10 text-primary px-6 py-2.5 hover:bg-primary/20 transition-all duration-200 disabled:opacity-50"
+                >
+                  {overviewGenerating ? '生成中...' : '✦ 生成課程總覽'}
+                </button>
+
+                <ReportOutput report={overviewReport} generating={overviewGenerating} />
+              </>
+            )}
+          </div>
+        )}
+
         {/* ── 預寫報告 ── */}
         {mode === 'report' && (
           <div>
@@ -454,7 +588,7 @@ export default function AIAssistant() {
                   <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground mb-3">現有資料</p>
                   <DataRow label="專案" value={client?.project_name} />
                   <DataRow label="目標" value={client?.goals?.join('、')} />
-                  <DataRow label="技術背景" value={client?.skills} />
+                  <DataRow label="現有基礎" value={client?.skills} />
                   {consultation ? (
                     <>
                       <DataRow label="諮詢日期" value={consultation.date ? new Date(consultation.date).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }) : null} />

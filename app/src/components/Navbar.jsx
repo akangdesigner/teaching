@@ -8,13 +8,21 @@ export default function Navbar() {
   const [email, setEmail] = useState('')
 
   useEffect(() => {
+    if (sessionStorage.getItem('guest') === 'true') {
+      setEmail('訪客')
+      return
+    }
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? '')
     })
   }, [])
 
   async function handleLogout() {
-    await supabase.auth.signOut()
+    if (sessionStorage.getItem('guest') === 'true') {
+      sessionStorage.removeItem('guest')
+    } else {
+      await supabase.auth.signOut()
+    }
     navigate('/login')
   }
 
@@ -45,7 +53,7 @@ export default function Navbar() {
 
         {/* Nav links */}
         <div className="flex items-center gap-8">
-          {navLink('/', '個案列表', true)}
+          {navLink('/', '學生列表', true)}
           {navLink('/calendar', '課程日曆')}
           {navLink('/ai', 'AI 助理')}
         </div>

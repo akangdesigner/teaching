@@ -31,7 +31,7 @@ export default function ClientForm() {
   const isEdit = !!id
 
   const [form, setForm] = useState({
-    name: '', project_name: '', current_stage: 'preparation',
+    name: '', project_name: '', current_stage: 'trial',
     personality: '', situation: '', skills: '', goals: '', next_session_date: '',
     consultation_date: '', summary: '', tech_level: 'beginner',
     weekly_hours: '', tools: '', project_proposals: '', consultation_notes: '',
@@ -50,7 +50,7 @@ export default function ClientForm() {
       if (!c) return
       setForm({
         name: c.name ?? '', project_name: c.project_name ?? '',
-        current_stage: c.current_stage ?? 'preparation',
+        current_stage: c.current_stage ?? 'trial',
         personality: c.personality ?? '', situation: c.situation ?? '',
         skills: c.skills ?? '', goals: (c.goals ?? []).join('\n'),
         next_session_date: toDatetimeInput(c.next_session_date),
@@ -113,9 +113,9 @@ export default function ClientForm() {
 
     const taskList = form.tasks.split('\n').map(t => t.trim()).filter(Boolean)
     if (taskList.length > 0) {
-      if (isEdit) await supabase.from('tasks').delete().eq('client_id', clientId).eq('source', 'stage1')
+      if (isEdit) await supabase.from('tasks').delete().eq('client_id', clientId).eq('source', 'consultation')
       await supabase.from('tasks').insert(
-        taskList.map(desc => ({ client_id: clientId, description: desc, source: 'stage1' }))
+        taskList.map(desc => ({ client_id: clientId, description: desc, source: 'consultation', completed: true }))
       )
     }
 
@@ -150,7 +150,7 @@ export default function ClientForm() {
                 <Input required value={form.name} onChange={set('name')} className="bg-card border-border focus:border-primary/50 rounded-none" />
               </div>
               <div>
-                <FieldLabel>學習專案名稱</FieldLabel>
+                <FieldLabel>學習主題</FieldLabel>
                 <Input value={form.project_name} onChange={set('project_name')} className="bg-card border-border focus:border-primary/50 rounded-none" />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -161,10 +161,8 @@ export default function ClientForm() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border rounded-none font-mono text-xs">
-                      <SelectItem value="preparation">準備階段</SelectItem>
-                      <SelectItem value="stage1">第一階段｜諮詢</SelectItem>
-                      <SelectItem value="stage2">第二階段｜課程</SelectItem>
-                      <SelectItem value="stage3">第三階段｜成果</SelectItem>
+                      <SelectItem value="trial">試聽</SelectItem>
+                      <SelectItem value="active">進行中</SelectItem>
                       <SelectItem value="completed">已完成</SelectItem>
                     </SelectContent>
                   </Select>
@@ -186,7 +184,7 @@ export default function ClientForm() {
                 <Input value={form.situation} onChange={set('situation')} placeholder="例：剛離職，目前在家顧小孩" className="bg-card border-border focus:border-primary/50 rounded-none" />
               </div>
               <div>
-                <FieldLabel>技術背景 / 技能</FieldLabel>
+                <FieldLabel>現有基礎 / 技能</FieldLabel>
                 <Textarea rows={3} value={form.skills} onChange={set('skills')} className="bg-card border-border focus:border-primary/50 rounded-none resize-none" />
               </div>
               <div>
@@ -200,9 +198,9 @@ export default function ClientForm() {
             </div>
           </section>
 
-          {/* 第一階段諮詢 */}
+          {/* 初次諮詢 */}
           <section>
-            <SectionTitle>第一階段｜諮詢紀錄</SectionTitle>
+            <SectionTitle>初次諮詢紀錄</SectionTitle>
             <div className="space-y-5">
               <div>
                 <FieldLabel>諮詢日期</FieldLabel>
@@ -210,7 +208,7 @@ export default function ClientForm() {
               </div>
               <div>
                 <FieldLabel>諮詢摘要</FieldLabel>
-                <Textarea rows={3} value={form.summary} onChange={set('summary')} placeholder="學員描述的問題與需求..." className="bg-card border-border focus:border-primary/50 rounded-none resize-none" />
+                <Textarea rows={3} value={form.summary} onChange={set('summary')} placeholder="學生描述的問題與需求..." className="bg-card border-border focus:border-primary/50 rounded-none resize-none" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -232,12 +230,12 @@ export default function ClientForm() {
                 </div>
               </div>
               <div>
-                <FieldLabel>主軸工具</FieldLabel>
-                <Input value={form.tools} onChange={set('tools')} placeholder="例：n8n、Gemini" className="bg-card border-border focus:border-primary/50 rounded-none" />
+                <FieldLabel>教材 / 工具</FieldLabel>
+                <Input value={form.tools} onChange={set('tools')} placeholder="例：課本、軟體、參考資源" className="bg-card border-border focus:border-primary/50 rounded-none" />
               </div>
               <div>
-                <FieldLabel>專案提案 <span className="text-muted-foreground/60 normal-case tracking-normal">（每行一個）</span></FieldLabel>
-                <Textarea rows={3} value={form.project_proposals} onChange={set('project_proposals')} placeholder={"提案一\n提案二"} className="bg-card border-border focus:border-primary/50 rounded-none resize-none" />
+                <FieldLabel>學習計畫 <span className="text-muted-foreground/60 normal-case tracking-normal">（每行一個）</span></FieldLabel>
+                <Textarea rows={3} value={form.project_proposals} onChange={set('project_proposals')} placeholder={"計畫一\n計畫二"} className="bg-card border-border focus:border-primary/50 rounded-none resize-none" />
               </div>
               <div>
                 <FieldLabel>備註</FieldLabel>
@@ -248,13 +246,13 @@ export default function ClientForm() {
 
           {/* 作業清單 */}
           <section>
-            <SectionTitle>第一次作業清單</SectionTitle>
+            <SectionTitle>初次作業清單</SectionTitle>
             <FieldLabel>作業項目 <span className="text-muted-foreground/60 normal-case tracking-normal">（每行一項）</span></FieldLabel>
             <Textarea
               rows={6}
               value={form.tasks}
               onChange={set('tasks')}
-              placeholder={"n8n 環境建置\n教學影片：了解基礎概念\n搜尋 3–5 個工作流參考"}
+              placeholder={"作業一\n作業二\n作業三"}
               className="bg-card border-border focus:border-primary/50 rounded-none resize-none"
             />
           </section>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button'
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   async function handleGoogleLogin() {
     setLoading(true)
@@ -22,7 +24,11 @@ export default function LoginPage() {
       setError('登入失敗：' + error.message)
       setLoading(false)
     }
-    // 成功會 redirect，不需要處理
+  }
+
+  function handleGuestLogin() {
+    sessionStorage.setItem('guest', 'true')
+    navigate('/')
   }
 
   return (
@@ -54,10 +60,27 @@ export default function LoginPage() {
             {loading ? '跳轉中...' : '使用 Google 帳號登入'}
           </Button>
 
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-card px-2 text-xs text-muted-foreground">或</span>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={handleGuestLogin}
+            className="w-full"
+          >
+            訪客登入
+          </Button>
+
           {error && <p className="text-xs text-destructive text-center">{error}</p>}
 
           <p className="text-xs text-muted-foreground text-center leading-relaxed">
-            登入即授權系統存取您的 Google Calendar，<br />用於課程時間雙向同步。
+            Google 登入可授權存取 Google Calendar，<br />用於課程時間雙向同步。
           </p>
         </Card>
       </div>

@@ -1,31 +1,31 @@
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
-const SYSTEM_PROMPT = `你是一個教學管理系統的 AI 助理，負責解析教師給的諮詢或課程紀錄，並產生對應的資料庫操作清單。
+const SYSTEM_PROMPT = `你是一個家教管理系統的 AI 助理，負責解析教師給的諮詢或課程紀錄，並產生對應的資料庫操作清單。
 
 ## 資料庫 Schema
 
-### clients（個案主表）
+### clients（學生主表）
 - name: text（姓名）
-- project_name: text（學習專案名稱）
-- current_stage: 'preparation' | 'stage1' | 'stage2' | 'stage3' | 'completed'
-- personality: text（性格特質）
-- situation: text（目前狀況）
-- skills: text（技術背景）
+- project_name: text（學習主題）
+- current_stage: 'trial' | 'active' | 'completed'
+- personality: text（個人特質）
+- situation: text（背景狀況）
+- skills: text（現有基礎）
 - goals: text[]（學習目標，陣列）
 - next_session_date: timestamptz（ISO 8601 格式，台灣時間 UTC+8）
 
-### consultations（第一階段：模擬諮詢，對應 stage1）
+### consultations（初次諮詢紀錄）
 - date: timestamptz
 - summary: text（本次諮詢摘要）
 - tech_level: 'beginner' | 'intermediate' | 'advanced'
 - weekly_hours: text（每週可投入時間）
-- tools: text（目前使用或熟悉的工具）
-- project_proposals: text[]（提案方向，陣列）
+- tools: text（教材或工具）
+- project_proposals: text[]（學習計畫，陣列）
 - next_session_date: timestamptz（下次上課時間）
 - notes: text（其他備注）
 
-### sessions（第二階段：每次課程紀錄，對應 stage2）
+### sessions（每次課程紀錄）
 - session_number: integer（第幾堂課）
 - date: timestamptz
 - objectives: text（本堂課目標）
@@ -34,20 +34,20 @@ const SYSTEM_PROMPT = `你是一個教學管理系統的 AI 助理，負責解�
 
 ### tasks（作業清單）
 - description: text（作業描述）
-- source: 'stage1' | 'session'（來源：stage1 諮詢或 session 課程）
+- source: 'consultation' | 'session'（來源：初次諮詢或課程）
 
 ## 可執行的操作類型（actions）
 
-1. **insert_client** — 新增個案（僅新學生時使用）
+1. **insert_client** — 新增學生（僅新學生時使用）
    - data: { name, project_name?, current_stage, personality?, situation?, skills?, goals?, next_session_date? }
 
-2. **update_client** — 更新個案主表（已有個案時使用）
+2. **update_client** — 更新學生主表（已有學生時使用）
    - data: { current_stage?, next_session_date? }
 
-3. **insert_consultation** — 新增諮詢紀錄（stage1 用）
+3. **insert_consultation** — 新增初次諮詢紀錄
    - data: { date, summary, tech_level, weekly_hours, tools, project_proposals, next_session_date, notes }
 
-4. **insert_session** — 新增課程紀錄（stage2 用）
+4. **insert_session** — 新增課程紀錄
    - data: { session_number, date, objectives, progress, notes }
 
 5. **insert_tasks** — 新增作業
@@ -56,20 +56,19 @@ const SYSTEM_PROMPT = `你是一個教學管理系統的 AI 助理，負責解�
 ## 判斷規則
 
 ### 新學生
-- 第一個 action 必須是 insert_client（含 current_stage: 'stage1'），再加 insert_consultation 和 insert_tasks
+- 第一個 action 必須是 insert_client（含 current_stage: 'trial'），再加 insert_consultation 和 insert_tasks
 
-### 已有個案（這是本次課程剛結束的內容，要往下推進階段）
+### 已有學生（這是本次課程剛結束的內容）
 
-依據個案目前的 current_stage 決定操作：
+依據學生目前的 current_stage 決定操作：
 
 | 目前階段 | 代表意義 | 要做的操作 |
 |----------|----------|-----------|
-| preparation | 這是第一次模擬諮詢（30min）剛結束 | insert_consultation + update_client(current_stage: 'stage1') |
-| stage1 | 這是第一堂正式課程（1hr）剛結束 | insert_session(session_number: 1) + update_client(current_stage: 'stage2') |
-| stage2 | 這是又一堂正式課程剛結束 | insert_session（session_number 從紀錄推算或留給使用者補）+ update_client（next_session_date 有提到才更新） |
-| stage3 | 成果報告階段 | update_client 視情況更新 |
+| trial | 這是初次諮詢剛結束 | insert_consultation + update_client(current_stage: 'active') |
+| active | 這是一堂課程剛結束 | insert_session + update_client（next_session_date 有提到才更新，不自動改 stage） |
+| completed | 已結束，視需要更新資料 | update_client 視情況更新 |
 
-- 若有提到作業 → 產生 insert_tasks
+- 若有提到作業 → 產生 insert_tasks（source: consultation 或 session）
 - 若紀錄中有明確提到下次上課時間 → 在 update_client 裡更新 next_session_date
 - 今天日期：${new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' })}
 
@@ -109,33 +108,33 @@ export async function generateConsultationReport({ client, consultation, tasks }
     : '??/??'
 
   const context = `
-個案姓名：${client.name}
-學習專案：${client.project_name ?? '（未填）'}
+學生姓名：${client.name}
+學習主題：${client.project_name ?? '（未填）'}
 學習目標：${(client.goals ?? []).join('、') || '（未填）'}
-技術背景：${client.skills ?? '（未填）'}
-目前狀況：${client.situation ?? '（未填）'}
+現有基礎：${client.skills ?? '（未填）'}
+背景狀況：${client.situation ?? '（未填）'}
 
 【關鍵日期】
 - 諮詢日期（時程起點）：${consultationDateStr}
 - 下次上課日期：${nextSessionStr ?? '（未填）'}
 
 諮詢摘要：${consultation?.summary ?? '（未填）'}
-主軸工具：${consultation?.tools ?? '（未填）'}
+教材/工具：${consultation?.tools ?? '（未填）'}
 每週可投入時間：${consultation?.weekly_hours ?? '（未填）'}
-技術程度：${{ beginner: '初學', intermediate: '有基礎', advanced: '進階' }[consultation?.tech_level] ?? '（未填）'}
-專案提案：${(consultation?.project_proposals ?? []).join('、') || '（未填）'}
+程度：${{ beginner: '初學', intermediate: '有基礎', advanced: '進階' }[consultation?.tech_level] ?? '（未填）'}
+學習計畫：${(consultation?.project_proposals ?? []).join('、') || '（未填）'}
 備註：${consultation?.notes ?? '（未填）'}
 
 上次指派作業：${tasks.length > 0 ? tasks.map(t => t.description).join('、') : '無'}
 `.trim()
 
-  const prompt = `根據以下個案資料，生成一份「第一階段諮詢紀錄報告」。
+  const prompt = `根據以下學生資料，生成一份「初次諮詢紀錄報告」。
 
 ${context}
 
 請嚴格按照以下格式輸出（純文字，不要 markdown 符號如 **、##）：
 
-標題：🟢 ${titleDate} 第一階段諮詢紀錄 #01
+標題：🟢 ${titleDate} 初次諮詢紀錄 #01
 【專案類型標籤】${consultationDateStr} - （從諮詢日期起，依每週時間與難度推算整體結束日期）
 專案題目：（填入專案名稱）
 所需技能：（填入相關工具與技能）
@@ -214,14 +213,14 @@ export async function generateSessionReport({ client, consultation, tasks, sessi
     : `【上一期課程紀錄】無（這是第一堂正式課）`
 
   const context = `
-個案姓名：${client.name}
-學習專案：${client.project_name ?? '（未填）'}
+學生姓名：${client.name}
+學習主題：${client.project_name ?? '（未填）'}
 學習目標：${(client.goals ?? []).join('、') || '（未填）'}
-技術背景：${client.skills ?? '（未填）'}
-第一階段諮詢摘要：${consultation?.summary ?? '（未填）'}
-主軸工具：${consultation?.tools ?? '（未填）'}
+現有基礎：${client.skills ?? '（未填）'}
+初次諮詢摘要：${consultation?.summary ?? '（未填）'}
+教材/工具：${consultation?.tools ?? '（未填）'}
 每週可投入時間：${consultation?.weekly_hours ?? '（未填）'}
-技術程度：${{ beginner: '初學', intermediate: '有基礎', advanced: '進階' }[consultation?.tech_level] ?? '（未填）'}
+程度：${{ beginner: '初學', intermediate: '有基礎', advanced: '進階' }[consultation?.tech_level] ?? '（未填）'}
 
 ${prevSessionBlock}
 
@@ -233,15 +232,15 @@ ${taskLines}
 下次上課時間：${nextSessionStr ?? '（未填）'}
 `.trim()
 
-  const prompt = `根據以下個案資料，生成一份「今天第二階段課程的課前準備報告」。
+  const prompt = `根據以下學生資料，生成一份「第 ${String(sessionNumber).padStart(2, '0')} 堂課的課前準備報告」。
 
 ${context}
 
-這份報告的目的是：在課程開始前整理上次諮詢後的作業狀況，本次任務指派欄位留白（課後才填）。
+這份報告的目的是：在課程開始前整理上次的作業狀況，本次任務指派欄位留白（課後才填）。
 
 請嚴格按照以下格式輸出（純文字，不要 markdown 符號如 **、##）：
 
-標題：🔵 ${titleDate} 第二階段課程紀錄 #${String(sessionNumber).padStart(2, '0')}
+標題：🔵 ${titleDate} 課程紀錄 #${String(sessionNumber).padStart(2, '0')}
 專案題目：（填入專案名稱）
 所需技能：（根據工具與技術背景填入）
 
@@ -283,6 +282,94 @@ ${nextSessionStr ? `\n下次上課時間：${nextSessionStr}` : ''}
   return text.trim()
 }
 
+export async function generateProgressOverview({ client, consultation, tasks, sessions }) {
+  const toDateStr = (iso) => {
+    if (!iso) return null
+    const d = new Date(iso)
+    const y = d.toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric' }).replace('年', '')
+    const m = String(d.toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric' }).replace('月', '')).padStart(2, '0')
+    const day = String(d.toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', day: 'numeric' }).replace('日', '')).padStart(2, '0')
+    return `${y}/${m}/${day}`
+  }
+
+  const sessionBlocks = sessions.map(s => `
+第 ${s.session_number} 堂（${toDateStr(s.date) ?? '日期未填'}）
+- 目標：${s.objectives ?? '（未填）'}
+- 進度：${s.progress ?? '（未填）'}
+- 備注：${s.notes ?? '（無）'}
+`.trim()).join('\n\n')
+
+  const taskLines = tasks.map(t => `${t.completed ? '✓' : '○'} [${t.source === 'consultation' ? '諮詢' : `第${sessions.find(s => s.id === t.session_id)?.session_number ?? '?'}堂`}] ${t.description}`).join('\n')
+  const latestSession = sessions.length > 0 ? sessions[sessions.length - 1] : null
+  const latestTasks = latestSession ? tasks.filter(t => t.session_id === latestSession.id) : []
+
+  const context = `
+學生姓名：${client.name}
+學習主題：${client.project_name ?? '（未填）'}
+學習目標：${(client.goals ?? []).join('、') || '（未填）'}
+現有基礎：${client.skills ?? '（未填）'}
+初次諮詢摘要：${consultation?.summary ?? '（未填）'}
+教材/工具：${consultation?.tools ?? '（未填）'}
+程度：${{ beginner: '初學', intermediate: '有基礎', advanced: '進階' }[consultation?.tech_level] ?? '（未填）'}
+目前階段：${client.current_stage ?? '（未填）'}
+已上堂數：${sessions.length} 堂
+
+【歷次課程紀錄】
+${sessionBlocks || '（尚無課程紀錄）'}
+
+【全部作業清單（✓已完成 ○未完成）】
+${taskLines || '（無作業紀錄）'}
+`.trim()
+
+  const prompt = `根據以下學生的完整學習紀錄，生成一份「課程進度總覽」。
+
+${context}
+
+這份總覽的目的是讓老師快速掌握整體學習軌跡、已完成的內容、作業完成狀況，以及目前進度與目標的差距。
+
+請嚴格按照以下格式輸出（純文字，不要 markdown 符號如 **、##）：
+
+課程進度總覽 ── ${client.name}
+學習主題：（填入）
+目前進度：第 ${sessions.length} 堂 ／ 目前階段（填入）
+
+學習軌跡摘要
+（依堂次，每堂一條以 ➤ 開頭，簡述本堂討論的核心進度與完成情況）
+
+作業完成狀況
+（統計總作業數、完成數、未完成數，再列出未完成的作業，每條以 -> 開頭）
+
+整體進度評估
+（根據學習目標，評估目前完成了哪些部分、還差哪些，以及建議的後續方向，條列 3-5 點，每點以 ➤ 開頭）
+
+注意：
+- 只輸出純文字報告，不要任何額外說明
+- 日期格式統一用 YYYY/MM/DD`
+
+  const response = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json()
+    throw new Error(err.error?.message || '呼叫 Groq API 失敗')
+  }
+
+  const result = await response.json()
+  const text = result.choices?.[0]?.message?.content
+  if (!text) throw new Error('Groq 沒有回傳內容')
+  return text.trim()
+}
+
 export async function parseSessionNotes({ clientName, currentStage, notes, isNew, stageHint }) {
   // stageHint: 'profile' | 'consultation' | 'session'
 
@@ -292,7 +379,7 @@ export async function parseSessionNotes({ clientName, currentStage, notes, isNew
     userMessage = `這是一位【新學生】，尚未建立個案。
 
 以下是學生的基本資料，請解析並產生：
-- insert_client（current_stage: 'preparation'，填入 name、project_name、personality、situation、skills、goals 等）
+- insert_client（current_stage: 'trial'，填入 name、project_name、personality、situation、skills、goals 等）
 
 ---
 ${notes}
@@ -310,12 +397,12 @@ ${notes}
 ${notes}
 ---`
   } else if (stageHint === 'consultation') {
-    userMessage = `個案姓名：${clientName}
+    userMessage = `學生姓名：${clientName}
 
-【第一階段模擬諮詢剛結束】請產生：
+【初次諮詢剛結束】請產生：
 - insert_consultation（填入 summary、tech_level、weekly_hours、tools、project_proposals、notes；date 只在紀錄中有明確提到諮詢時間時才填，否則省略；next_session_date 只在有明確提到下次上課時間時才填）
-- update_client（current_stage: 'stage1'，若有 next_session_date 也一起更新）
-- insert_tasks（若有提到作業，source: 'stage1'）
+- update_client（current_stage: 'active'，若有 next_session_date 也一起更新）
+- insert_tasks（若有提到作業，source: 'consultation'）
 
 重要：date 與 next_session_date 請勿自行推斷或填今天日期，只有紀錄中明確寫出時間才填入。
 
@@ -323,12 +410,12 @@ ${notes}
 ${notes}
 ---`
   } else if (stageHint === 'session') {
-    userMessage = `個案姓名：${clientName}
+    userMessage = `學生姓名：${clientName}
 目前階段：${currentStage}
 
-【第二階段課程剛結束】請產生：
+【課程剛結束】請產生：
 - insert_session（填入 session_number、objectives、progress、notes；date 只在紀錄中有明確提到時間時才填，否則省略）
-- update_client（current_stage: 'stage2'，若有提到下次上課時間則更新 next_session_date）
+- update_client（不自動改 current_stage；若有提到下次上課時間則更新 next_session_date）
 - insert_tasks（若有提到作業，source: 'session'）
 
 重要：date 欄位請勿自行推斷或填今天日期，只有紀錄中明確寫出上課時間才填入。

@@ -171,8 +171,8 @@ function addCoverSlide(prs, client, aiContent) {
   const sessionCount = 0  // passed from outside if needed
 
   const stageLabel = {
-    preparation: '準備階段', stage1: '第一階段｜諮詢',
-    stage2: '第二階段｜課程', stage3: '第三階段｜成果', completed: '已完成',
+    trial: '試聽', active: '進行中', completed: '已完成',
+    preparation: '試聽', stage1: '進行中', stage2: '進行中', stage3: '進行中',
   }[client.current_stage] || client.current_stage
 
   // 深色上半部
@@ -225,19 +225,14 @@ function addCoverSlide(prs, client, aiContent) {
     align: 'center', valign: 'middle', bold: true,
   })
 
-  // 技術背景標籤
+  // 現有基礎標籤
   if (client.skills) {
-    slide.addText(`技術背景：${client.skills}`, {
+    slide.addText(`現有基礎：${client.skills}`, {
       x: 0.5, y: 4.35, w: 9, h: 0.3,
       fontSize: 11, color: COLORS.muted, fontFace: 'Calibri',
     })
   }
 
-  // 右下品牌
-  slide.addText('QutekangberAI Studio', {
-    x: 6.5, y: 4.75, w: 3, h: 0.3,
-    fontSize: 10, color: COLORS.muted, align: 'right', fontFace: 'Calibri',
-  })
 }
 
 // ── Slide 2：成果檢視 ─────────────────────────────────────────
@@ -556,15 +551,9 @@ function addNextStepsSlide(prs, client, nextSteps) {
     }
   })
 
-  // 底部品牌列
-  slide.addShape('rect', { x: 0, y: 4.72, w: '100%', h: 0.33, fill: { color: COLORS.dark } })
-  slide.addText('QutekangberAI Studio', {
-    x: 0, y: 4.72, w: '100%', h: 0.33,
-    fontSize: 10, color: 'A5B4FC', align: 'center', valign: 'middle', fontFace: 'Calibri',
-  })
 }
 
-// ── n8n 節點說明資料 ─────────────────────────────────────────
+// ── removed ──
 const N8N_NODES = [
   {
     name: 'HTTP Request',
@@ -993,18 +982,6 @@ function addAIVideoSlides(prs, projectName) {
   })
 }
 
-// ── 判斷是否為 n8n 專案 ───────────────────────────────────────
-function isN8nProject(client) {
-  const text = [client.project_name, ...(client.goals || [])].join(' ').toLowerCase()
-  return text.includes('n8n')
-}
-
-// ── 判斷是否為 AI 影片生成專案 ───────────────────────────────
-function isAIVideoProject(client) {
-  const text = [client.project_name, ...(client.goals || [])].join(' ').toLowerCase()
-  return ['影片', 'video', 'sora', 'runway', 'kling', 'vidu', 'hailuo', 'ai生成', '生成影片'].some(k => text.includes(k))
-}
-
 // ── 主函式 ────────────────────────────────────────────────────
 export async function generateAndDownloadPPT({ client, sessions, tasks, consultation }) {
   const aiContent = await generateSlideContent({ client, sessions, tasks, consultation })
@@ -1017,14 +994,6 @@ export async function generateAndDownloadPPT({ client, sessions, tasks, consulta
   addGoalsSlide(prs, aiContent.goals || [])
   addTeachingSlide(prs, client, aiContent.teaching_modules || [])
   addNextStepsSlide(prs, client, aiContent.next_steps || [])
-
-  if (isN8nProject(client)) {
-    addN8nNodeSlides(prs, client.project_name)
-  }
-
-  if (isAIVideoProject(client)) {
-    addAIVideoSlides(prs, client.project_name)
-  }
 
   const today = new Date().toLocaleDateString('zh-TW', {
     timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',

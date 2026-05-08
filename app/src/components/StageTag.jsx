@@ -1,13 +1,16 @@
 const config = {
-  preparation: { label: '準備階段', dotClass: 'stage-preparation-dot', textClass: 'stage-preparation' },
-  stage1:      { label: '第一階段｜諮詢', dotClass: 'stage-1-dot', textClass: 'stage-1' },
-  stage2:      { label: '第二階段｜課程', dotClass: 'stage-2-dot', textClass: 'stage-2' },
-  stage3:      { label: '第三階段｜成果', dotClass: 'stage-3-dot', textClass: 'stage-3' },
-  completed:   { label: '已完成', dotClass: 'stage-completed-dot', textClass: 'stage-completed' },
+  trial:     { label: '試聽',   dotClass: 'stage-trial-dot',     textClass: 'stage-trial' },
+  active:    { label: '進行中',  dotClass: 'stage-active-dot',    textClass: 'stage-active' },
+  completed: { label: '已完成',  dotClass: 'stage-completed-dot', textClass: 'stage-completed' },
+  // legacy fallbacks
+  preparation: { label: '試聽',   dotClass: 'stage-trial-dot',  textClass: 'stage-trial' },
+  stage1:      { label: '進行中', dotClass: 'stage-active-dot', textClass: 'stage-active' },
+  stage2:      { label: '進行中', dotClass: 'stage-active-dot', textClass: 'stage-active' },
+  stage3:      { label: '進行中', dotClass: 'stage-active-dot', textClass: 'stage-active' },
 }
 
 export default function StageTag({ stage }) {
-  const { label, dotClass, textClass } = config[stage] ?? config.preparation
+  const { label, dotClass, textClass } = config[stage] ?? config.trial
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-mono ${textClass}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotClass}`} />

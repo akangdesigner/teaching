@@ -6,11 +6,9 @@ import Navbar from '../components/Navbar'
 import StageTag from '../components/StageTag'
 
 const FILTERS = [
-  { key: 'all', label: '全部個案' },
-  { key: 'preparation', label: '準備階段' },
-  { key: 'stage1', label: '第一階段' },
-  { key: 'stage2', label: '第二階段' },
-  { key: 'stage3', label: '第三階段' },
+  { key: 'all', label: '全部學生' },
+  { key: 'trial', label: '試聽' },
+  { key: 'active', label: '進行中' },
   { key: 'completed', label: '已完成' },
 ]
 
@@ -23,7 +21,7 @@ export default function Dashboard() {
   useEffect(() => {
     supabase
       .from('clients')
-      .select('*')
+      .select('*, sessions!client_id(id)')
       .order('created_at', { ascending: false })
       .then(({ data }) => {
         setClients(data ?? [])
@@ -96,7 +94,12 @@ export default function Dashboard() {
                   <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors duration-150">
                     {client.name}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{client.project_name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {client.project_name}
+                    {client.current_stage === 'active' && (client.sessions?.length ?? 0) > 0 && (
+                      <span className="ml-1.5 opacity-50">#{client.sessions.length}</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
